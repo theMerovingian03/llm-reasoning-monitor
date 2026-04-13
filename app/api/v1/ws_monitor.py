@@ -54,7 +54,7 @@ async def websocket_monitor(websocket: WebSocket):
 
                     await websocket.send_json({
                         "type": "analysis",
-                        "data": analysis
+                        "data": analysis.model_dump()
                     })
 
                     # interrupt if unsafe
