@@ -3,8 +3,10 @@ from __future__ import annotations
 import json
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from app.utils.monitor_utils.analyzer import run_monitor
+from app.services.step_parser import StepParser
 
 router = APIRouter()
+step_parser = StepParser()
 
 @router.websocket("/ws/monitor")
 async def websocket_monitor(websocket: WebSocket):
@@ -27,7 +29,8 @@ async def websocket_monitor(websocket: WebSocket):
 
             # THINK PARSING STATE
             in_think = False
-            think_buffer = ""
+            current_step = ""
+            reasoning_so_far = ""
 
             async for token in agent.stream(messages):
 
@@ -40,41 +43,69 @@ async def websocket_monitor(websocket: WebSocket):
                 # detect <think> start
                 if "<think>" in token:
                     in_think = True
-
-                # accumulate reasoning
-                if in_think:
-                    think_buffer += token
+                    continue
 
                 # detect </think> end
                 if "</think>" in token:
                     in_think = False
 
-                    # RUN MONITOR HERE
-                    analysis = await run_monitor(monitor, prompt, think_buffer)
+                    # Flush remaining step
+                    if current_step.strip():
+                        step = current_step.strip()
 
-                    await websocket.send_json({
-                        "type": "analysis",
-                        "data": analysis.model_dump()
-                    })
+                        analysis = await run_monitor(
+                            monitor,
+                            prompt,
+                            reasoning_so_far,
+                            step
+                        )
 
-                    # interrupt if unsafe
-                    if not analysis.safe:
                         await websocket.send_json({
-                            "type": "interrupt",
-                            "reason": analysis.reason
+                            "type": "analysis",
+                            "step": step,
+                            "data": analysis.model_dump()
                         })
-                        break
 
-            # fallback: if no closing tag but buffer exists
-            if think_buffer:
-                analysis = await run_monitor(monitor, prompt, think_buffer)
+                    break
 
-                await websocket.send_json({
-                    "type": "analysis",
-                    "data": analysis
-                })
+                if not in_think:
+                    continue
+
+                # accumuate step
+                current_step += token
+
+                # step boundary detection
+                if step_parser.detect_step_boundary(current_step):
+                    raw = current_step.strip()
+                    current_step = ""
+
+                    # split into clean steps
+                    steps = step_parser.split_steps(raw)
+
+                    for step in steps:
+                        reasoning_so_far += step + " "
+
+                        analysis = await run_monitor(
+                            monitor,
+                            prompt,
+                            reasoning_so_far,
+                            step
+                        )        
+
+                        await websocket.send_json({
+                            "type": "analysis",
+                            "step": step,
+                            "data": analysis.model_dump()
+                        })
+
+                        # interrupt early
+                        if not analysis.safe:
+                            await websocket.send_json({
+                                "type": "interrupt",
+                                "reason": analysis.reason
+                            })
+                            return
 
             await websocket.send_json({"type": "done"})
-
     except WebSocketDisconnect:
         print("Client disconnected")

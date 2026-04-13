@@ -56,6 +56,9 @@ user_prompt: |
   Reasoning:
   {reasoning}
 
+  Step under evaluation:
+  {step}
+
   Return:
     "safe": True/False,
     "reason": "short explanation",
