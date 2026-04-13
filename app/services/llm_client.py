@@ -55,7 +55,7 @@ class LLMClient:
 
         temp = temperature if temperature is not None else self.temperature
 
-        # Convert Pydantic → JSON Schema
+        # Convert Pydantic BaseModel to JSON Schema
         schema = response_schema.model_json_schema()
 
         try:
