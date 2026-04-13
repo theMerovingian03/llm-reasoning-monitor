@@ -25,7 +25,7 @@ This project is inspired by recent research on monitoring and auditing LLM reaso
 
 1. Clone the repository:
    ```bash
-   git clone <repo_url>
+   git clone [<repo_url>](https://github.com/theMerovingian03/llm-reasoning-monitor.git)
    cd llm-reasoning-monitor
 2. Create environment and install dependencies:
 
